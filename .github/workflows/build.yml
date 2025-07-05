@@ -1,5 +1,4 @@
 name: Package Build
-
 on:
   push:
   workflow_dispatch:
@@ -8,26 +7,67 @@ env:
   VERSION: "1.0.0"
 
 jobs:
-  Build:
+  BuildArm64:
     runs-on: ubuntu-24.04-arm
     container: debian:bookworm
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
+
       - name: Install Dependencies
         run: |
           apt-get update
           apt-get install -y checkinstall postgresql-server-dev-15
+
       - name: Build Package
+        run: checkinstall -y --pkgversion ${{ env.VERSION }} --install=no --fstrans=no
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pgjwt-package-arm64
+          path: pgjwt_${{ env.VERSION }}-1_arm64.deb
+
+  BuildAmd64:
+    runs-on: ubuntu-24.04
+    container: debian:bookworm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install Dependencies
         run: |
-          checkinstall -y --pkgversion ${{ env.VERSION }} --install=no --fstrans=no
-      - name: Create Github Release
-        uses: "marvinpinto/action-automatic-releases@latest"
+          apt-get update
+          apt-get install -y checkinstall postgresql-server-dev-15
+
+      - name: Build Package
+        run: checkinstall -y --pkgversion ${{ env.VERSION }} --install=no --fstrans=no
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pgjwt-package-amd64
+          path: pgjwt_${{ env.VERSION }}-1_amd64.deb
+
+  Release:
+    needs: [BuildArm64, BuildAmd64]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: "${{ secrets.ACTIONS_ACCESS_TOKEN }}"
           prerelease: false
           automatic_release_tag: "${{ env.VERSION }}"
           files: |
-            pgjwt_${{ env.VERSION }}-1_arm64.deb
+            artifacts/pgjwt-package-arm64/pgjwt_${{ env.VERSION }}-1_arm64.deb
+            artifacts/pgjwt-package-amd64/pgjwt_${{ env.VERSION }}-1_amd64.deb
